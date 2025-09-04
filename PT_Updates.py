@@ -91,6 +91,7 @@ class PTUpdatesOrchestrator:
             
             # Initialize database manager
             self.db = SDEDatabase(self.config.connections.model_dump())
+            self.metadata_mgr = SDEDatabase(self.config.connections.model_dump())
 
             # Validate prerequisites
             prereq_valid, prereq_issues = self.db.validate_prerequisites()
