@@ -1,0 +1,13 @@
+# Logs
+logs/
+*.log
+
+# Configuration files with sensitive data config/settings.json
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# ArcGIS temporary files
+*.lock
