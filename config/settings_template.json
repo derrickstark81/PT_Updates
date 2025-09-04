@@ -1,0 +1,53 @@
+{
+    "connections": 
+{
+    "test_SDE": "C:/Users/YOUR_USERNAME/AppData/Roaming/Esri/ArcGISPro/Favorites/YOUR_TEST_SDE_CONNECTION.sde", 
+    "prod_SDE": "C:/Users/YOUR_USERNAME/AppData/Roaming/Esri/ArcGISPro/Favorites/YOUR_PROD_SDE_CONNECTION.sde", 
+    "oracle_ODC": "C:/Users/YOUR_USERNAME/AppData/Roaming/Esri/ArcGISPro/Favorites/YOUR_ORACLE_CONNECTION.odc",
+    "csa_Prod_SDE": "C:/Users/YOUR_USERNAME/AppData/Roaming/Esri/ArcGISPro/Favorites/YOUR_CSA_SDE_CONNECTION.sde"
+},
+
+"paths": 
+{
+    // Geodatabases
+    "config_Path": "//YOUR_SERVER/GeoDat/GIS/ArcGIS/Toolboxes/ArcGIS_Pro_Toolboxes/Z_SDE_Layers_Update_Pro/Water Rights/PTs/PT_Updates.json", 
+    "temp_gdb": "//YOUR_SERVER/GeoDat/temp/PTs.gdb",
+    "water_rights_gdb": "//YOUR_SERVER/MasterCovs/z_GDBs/Water_Rights.gdb",
+    
+    // Output Directories
+    "mastercovs_dir": "//YOUR_SERVER/GeoDat/temp/MasterCovs",
+    "summary_tables_dir": "//YOUR_SERVER/MasterCovs/z_GDBs/z_sum_Tables",
+    "public_download_dir": "//YOUR_PUBLIC_SERVER_IP/webfinal/maps/data/layers/Water_Rights",
+
+    // Metadata
+    "metadata_dir": "//YOUR_SERVER/GeoDat/ArcGIS/Toolboxes/ArcGIS_Pro_Toolboxes/Z_SDE_Layers_Update_Pro/Water Rights/PT_Updates/metadata",
+    "metadata_files": {
+        "points_all": "WR_PT_Points_All.xml",
+        "points_active": "WR_PT_Points_Active.xml",
+        "pt_points": "WR_PT_Points.xml",
+
+        "lands_all": "WR_PT_Lands_All.xml",
+        "lands_active": "WR_PT_Lands_Active.xml",
+        "pt_lands": "WR_PT_Lands.xml"
+    }
+},
+
+"parameters": 
+{
+    // Data Filters
+    "active_status_code": ["A", "E", null], // For SQL WHERE clauses
+    "date_filters": {
+        "default_year_range": 2, // For c2CreateIdenticalPointsTable
+        "current_year": 2025 // Can be auto-calculated
+    },
+
+    // Processing
+    "thread_count": 4, // For threadPoolExecutor
+    "skip_summary_tables": false, // Optional toggle for d2CreateSummaryTables
+
+    // Metadata
+    "metadata_standard": "ISO 19139", // For arcpy.MetadataImporter
+    "force_metadata_update": false // Overwrite existing metadata
+
+}
+}
