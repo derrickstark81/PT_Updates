@@ -356,7 +356,7 @@ def create_progress_tracker(total_steps: int, operation_name: str = "Operation")
             )
 
         def complete(self):
-            total_time = time.time() = self.start_time
+            total_time = time.time() - self.start_time
             logger.info(
                 f"{self.name} completed in {total_time/60:.1f} minutes "
                 f"({total_time/self.total:.1f}s avg per step)"

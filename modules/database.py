@@ -233,7 +233,7 @@ class SDEDatabase:
             f"EXP_DATE >= date '{current_date}'"
         )
 
-        arcpy.conversion.ExportFeature(
+        arcpy.conversion.ExportFeatures(
             "WR_PT_Points_All_Layer",
             f"{self.test_sde}\\OWRBGIS.WR_PT_Points_Active"
         )
