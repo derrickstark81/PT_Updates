@@ -213,7 +213,7 @@ class SDEDatabase:
     def _create_points_all_layer(self, source_fc: str) -> None:
         """Create and populate WR_PT_Points_All layer."""
 
-        all_layer = f"{self.test_sde}\\OWRBGIS.WR_PT_Points_All"
+        all_layer = f"{self.test_SDE}\\OWRBGIS.WR_PT_Points_All"
 
         # Export with filter
         arcpy.conversion.ExportFeatures(
@@ -228,14 +228,14 @@ class SDEDatabase:
         current_date = datetime.now().strftime("%Y-%m-%d")
 
         arcpy.management.MakeFeatureLayer(
-            f"{self.test_sde}\\OWRBGIS.WR_PT_Points_All",
+            f"{self.test_SDE}\\OWRBGIS.WR_PT_Points_All",
             "WR_PT_Points_All_Layer",
             f"EXP_DATE >= date '{current_date}'"
         )
 
         arcpy.conversion.ExportFeatures(
             "WR_PT_Points_All_Layer",
-            f"{self.test_sde}\\OWRBGIS.WR_PT_Points_Active"
+            f"{self.test_SDE}\\OWRBGIS.WR_PT_Points_Active"
         )
 
     def update_pt_lands_modern(self) -> bool:
