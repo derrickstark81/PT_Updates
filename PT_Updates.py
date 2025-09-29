@@ -21,6 +21,7 @@ Description:
 History:  
     Initial coding - DAS 20250617
     Enhanced modern implementation - DAS 20250903
+    Test and fix issues from dry run - DAS 20250929
 
 Usage:  python PT__Updates.py [--config settings.json] [--dry-run] [--skip-phase phase_number]
 Comments: 
@@ -33,10 +34,42 @@ Comments:
   Toolbox: //OWBGIS/GeoDat/GIS/ArcGIS/Toolboxes/ArcGIS_Pro_Toolboxes/Z_SDE_Layers_Update_Pro
 """
 
-import sys, argparse, traceback
+import sys, argparse, traceback, logging
 from pathlib import Path
+import datetime as dt
 from datetime import datetime, time
 from typing import Dict, Any, Optional, List
+
+def _setup_file_logging(log_dir: Path, level: str = "INFO") -> logging.Logger:
+    """
+    Robust local file+console logger. Creates logs/<date>.log with rotation.
+    Avoids dictConfig pitfalls and weird handler names.
+    """
+
+    log_dir = Path(log_dir)
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    logger = logging.getLogger("pt_updates")
+
+    # Reset handlers so re-runs don't double-log
+    logger.handlers.clear()
+    logger.setLevel(getattr(logging, level.upper(), logging.INFO))
+
+    # File handler (rotating)
+    log_name = f"pt_updates_{dt.datetime.now().strftime('%Y%m%d')}.log"
+    fh = logging.handlers.RotatingFileHandler(
+        log_dir / log_name, maxBytes = 5 * 1024 * 1024, backupCount = 5, encoding = "utf-8"
+    )
+    fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s - %(message)s")
+    fh.setFormatter(fmt)
+    logger.addHandler(fh)
+
+    # Console handler
+    sh = logging.StreamHandler()
+    sh.setFormatter(fmt)
+    logger.addHandler(sh)
+
+    return logger
 
 # Ensure modules directory is in path
 sys.path.append(str(Path(__file__).parent / "modules"))
@@ -77,10 +110,15 @@ class PTUpdatesOrchestrator:
             print("✅ Configuration validated successfully")
 
             # Setup logging
-            self.logger = setup_logging(
-                Path(__file__).parent / "logs",
-                self.config.parameters.metadata_standard # Using as log level for now
-            )
+            log_dir = Path(__file__).parent / "logs"
+            
+            try:
+                self.logger = _setup_file_logging(log_dir, "INFO")
+            except Exception as log_err:
+                print(f"⚠️ Logging to file disabled: {log_err}")
+                logging.basicConfig(level=logging.INFO,
+                                    format="%(asctime)s %(levelname)s %(message)s")
+                self.logger = logging.getLogger("pt_updates_fallback")
 
             # Validate ArcGIS environment
             is_valid, issues = validate_arcgis_environment()
@@ -91,12 +129,12 @@ class PTUpdatesOrchestrator:
             
             # Initialize database manager
             self.db = SDEDatabase(self.config.connections.model_dump())
-            self.metadata_mgr = SDEDatabase(self.config.connections.model_dump())
+            self.metadata_mgr = MetadataManager(self.config.paths.metadata_dir)
 
             # Validate prerequisites
             prereq_valid, prereq_issues = self.db.validate_prerequisites()
             if not prereq_valid:
-                for issues in prereq_issues:
+                for issue in prereq_issues:
                     self.logger.error(f"Prerequisite issue: {issue}")
                 return False
             
@@ -126,7 +164,7 @@ class PTUpdatesOrchestrator:
         if skip_phases is None:
             skip_phases = []
 
-        self.start_time = datetime.now()
+        self.start_time = dt.datetime.now()
         self.logger.info("=" * 80)
         self.logger.info("🏁 Starting PT Updates Full Workflow")
         self.logger.info("=" * 80)
@@ -261,7 +299,7 @@ class PTUpdatesOrchestrator:
             connection_info = self.db.get_connection_info()
 
             # Calculate performance stats
-            total_duration = (datetime.now() - self.start_time).total_seconds()
+            total_duration = (dt.datetime.now() - self.start_time).total_seconds()
 
             performance_stats = {
                 "total_duration_minutes": round(total_duration / 60, 2),
@@ -275,7 +313,7 @@ class PTUpdatesOrchestrator:
             }
 
             # Create execution report
-            report_path = Path(__file__).parent / "logs" / f"pt_updates_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            report_path = Path(__file__).parent / "logs" / f"pt_updates_report_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
 
             report = create_execution_report(
                 self.operation_results,
@@ -396,7 +434,7 @@ class PTUpdatesOrchestrator:
 
             # Final logging
             if self.start_time:
-                total_duration = (datetime.now() - self.start_time).total_seconds()
+                total_duration = (dt.datetime.now() - self.start_time).total_seconds()
                 self.logger.info(f"⏱️ Total execution time: {total_duration/60:.1f} minutes")
 
         except Exception as e:
@@ -412,8 +450,8 @@ def parse_arguments() -> argparse.Namespace:
 
     parser.add_argument(
         "--config", "-c",
-        default="settings.json",
-        help="Path to configuraton file (default: settings.json)"
+        default="config/settings.json",
+        help="Path to configuraton file (default: config/settings.json)"
     )
 
     parser.add_argument(
@@ -448,12 +486,17 @@ def main():
 
     # Parse command line arguments
     args = parse_arguments()
+    
 
     # Print banner
     print("=" * 80)
     print("🌊 OKLAHOMA WATER RESOURCES BOARD")
-    print("📋 Provisional Temporary (PT) Updates - Modern Implementation")
+    print("📋 Provisional Temporary (PT) Updates")
     print("🚀 ArcGIS Pro 3.4+ / Enterprise 11.x Compatible")
+    print("=" * 80)
+
+    # Print the config path being used
+    print(f"Using config: {Path(args.config).resolve()}")
     print("=" * 80)
 
     try:
