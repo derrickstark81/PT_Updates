@@ -492,7 +492,7 @@ def main():
     print("=" * 80)
     print("🌊 OKLAHOMA WATER RESOURCES BOARD")
     print("📋 Provisional Temporary (PT) Updates")
-    print("🚀 ArcGIS Pro 3.4+ / Enterprise 11.x Compatible")
+    print("🚀 ArcGIS Pro 3.4+ / Enterprise 11.3 Compatible")
     print("=" * 80)
 
     # Print the config path being used
