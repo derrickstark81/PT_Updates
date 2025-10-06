@@ -13,7 +13,17 @@ Usage: Use in main script
 Comments: Added performance monitoring, advanced validation, and file operations
 ************************************************************************************************************************************'''
 
-import time, logging, psutil, json, subprocess, threading, arcpy, shutil, smtplib
+import time 
+import logging 
+import psutil 
+import json 
+import subprocess 
+import threading 
+import arcpy 
+import shutil 
+import smtplib
+import sys
+import platform
 from functools import wraps
 from typing import Callable, Any, Dict, List, Optional, Tuple
 from zipfile import ZipFile, ZIP_DEFLATED
@@ -33,7 +43,7 @@ class PerformanceMonitor:
         self.start_time = None
         self.peak_memory = 0
         self.monitoring = False
-        self.monitor_thread = None
+        self._monitor_thread = None
 
     def start_monitoring(self):
         """Start performance monitoring."""
@@ -52,7 +62,7 @@ class PerformanceMonitor:
 
         duration = time.time() - self.start_time if self.start_time else 0
 
-        return{
+        return {
             "duration_seconds": round(duration, 2),
             "peak_memory_mb": round(self.peak_memory / (1024 * 1024), 2),
             "cpu_percent": psutil.cpu_percent(),
@@ -161,7 +171,7 @@ def zip_files_advanced(src_dir: str, output_zip: str,
         output_path = Path(output_zip)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with ZipFile(output_zip, 'W', ZIP_DEFLATED) as zipf:
+        with ZipFile(output_zip, 'w', ZIP_DEFLATED) as zipf:
             files_added = 0
 
             # Get all files to zip
@@ -220,7 +230,7 @@ def setup_logging(log_dir: str, log_level: str = "INFO") -> logging.Logger:
             "file": {
                 "class": "logging.FileHandler",
                 "filename": str(log_file),
-                "mode": "W",
+                "mode": "w",
                 "formatter": "detailed",
                 "level": log_level
             },
@@ -486,8 +496,8 @@ def create_execution_report(operation_results: Dict[str, Any],
         "system_info": {
             "cpu_count": psutil.cpu_count(),
             "total_memory_gb": round(psutil.virtual_memory().total / (1024**3), 2), 
-            "python_version": f"{psutil.version_info.major}.{psutil.version_info.minor}",
-            "platform": psutil.Process().platform
+            "python_version": platform.python_version(),
+            "platform": sys.platform
         }
     }
 
@@ -497,7 +507,7 @@ def create_execution_report(operation_results: Dict[str, Any],
             output_path = Path(output_file)
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            with open(output_path, 'W') as f:
+            with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(report, f, indent=2, default=str)
 
             logger.info(f"Execution report saved to: {output_file}")

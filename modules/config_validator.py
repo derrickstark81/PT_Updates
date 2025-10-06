@@ -47,7 +47,7 @@ class DateFiltersConfig(BaseModel):
     current_year: int = Field(2025, ge=2020, le=2030)
 
 class PathsConfig(BaseModel):
-    config_Path: str
+    config_path: str
     temp_gdb: str
     water_rights_gdb: str
     mastercovs_dir: str
