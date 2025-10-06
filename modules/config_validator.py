@@ -15,7 +15,7 @@ Comments: Added comprehensive validation for paths, connections, and parameters
 ************************************************************************************************************************************'''
 
 import json
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
@@ -47,7 +47,7 @@ class DateFiltersConfig(BaseModel):
     current_year: int = Field(2025, ge=2020, le=2030)
 
 class PathsConfig(BaseModel):
-    config_path: str
+    config_path: str = Field(validation_alias=AliasChoices("config_path", "config_Path"))
     temp_gdb: str
     water_rights_gdb: str
     mastercovs_dir: str
