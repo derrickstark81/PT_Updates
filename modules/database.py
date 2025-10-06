@@ -267,8 +267,21 @@ class SDEDatabase:
             )
 
             # Perform joins for descriptive fields
-            for fields in ("WATER_CODE", "PURPOSE_CODE", "SIC_CODE"):
-                self._perform_lookup_joins(lands_temp, field)
+
+            fields_to_lookup = ("WATER_CODE", "PURPOSE_CODE", "SIC_CODE")
+            existing_fields = {f.name.upper(): f.name for f in arcpy.ListFields(lands_temp)}
+
+
+            for lookup_field in fields_to_lookup:
+                field_name = existing_fields.get(lookup_field)
+                if not field_name:
+                    logger.warning(
+                        "PT Lands temp layer is missing expected fields %s - skipping lookup join",
+                        lookup_field,
+                    )
+                    continue
+
+                self._perform_lookup_joins(lands_temp, field_name)
 
             # Create All and Active layers
             self._create_lands_layers(lands_temp)

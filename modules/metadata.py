@@ -13,7 +13,10 @@ Usage: Use in main script
 Comments: Added batch operations, validation, and modern XML handling
 ************************************************************************************************************************************'''
 
-import arcpy, os, logging, shutil
+import arcpy
+import os
+import logging
+import shutil
 from pathlib import Path
 import xml.etree.ElementTree as ET
 from datetime import datetime
