@@ -20,6 +20,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
+arcpy.env.overwriteOutput = True
 
 class DatabaseError(Exception):
     """Custom exception for database operations."""
@@ -64,21 +65,20 @@ class SDEDatabase:
                 time.sleep(delay)
                 delay *= 2 # Exponential backoff
 
-    def export_table_safe(self, source: str, target: str, where_clause: Optional[str] = None) -> bool:
+    def export_table_safe(self, src, tgt, where=None, max_attempts=3):
         """Export table with retry logic and validation."""
-        def _export():
-            logger.info(f"Exporting {source} to {target}")
-            arcpy.conversion.ExportTable(source, target, where_clause)
-
-            # Validate export success
-            if not arcpy.Exists(target):
-                raise DatabaseError(f"Export failed - target does not exist: {target}")
-            
-            count = int(arcpy.management.GetCount(target)[0])
-            logger.info(f"Successfully exported {count} records to {target}")
-            return True
-        
-        return self.retry_operation(_export)
+        last_err = None
+        for attempt in range(1, max_attempts+1):
+            try:
+                if arcpy.Exists(tgt):
+                    arcpy.management.Delete(tgt)
+                arcpy.conversion.ExportTable(src, tgt, where_clause=where or "")
+                return {"source": src, "target": tgt, "rows": int(arcpy.management.GetCount(tgt)[0])}
+            except Exception as e:
+                last_err = e
+                self.logger.warning(f"Attempt {attempt} failed: {e}. Retrying in {attempt}.0s...")
+                time.sleep(attempt) # 1s, 2s, 3s
+        raise RuntimeError(f"Operation failed after {max_attempts} attempts: {last_err}")
     
     def truncate_table_safe(self, table_path: str) -> bool:
         """Safely truncate table with validation."""
@@ -95,6 +95,17 @@ class SDEDatabase:
             return True
         
         return self.retry_operation(_truncate)
+    
+    def truncate_and_copy(self, src: str, tgt: str):
+        '''Idempotent copy to CSA/Prod: create target if missing, else truncate and append.'''
+        if not arcpy.Exists(src):
+            raise FileNotFoundError(f"Source does not exist: {src}")
+        
+        if arcpy.Exists(tgt):
+            arcpy.management.TruncateTable(tgt)
+            arcpy.management.Append(inputs=src, target=tgt, schema_type="NO_TEST")
+        else:
+            arcpy.management.CopyRows(src, tgt) # Creates table with schema on first run
     
     def append_data_safe(self, source: str, target: str, schema_type: str = "TEST") -> bool:
         """Safely append data with validation."""
@@ -241,6 +252,15 @@ class SDEDatabase:
     def update_pt_lands_modern(self) -> bool:
         """Modern implementation of 2bUpdatePTLandsOnTest."""
 
+        src_table_path = f"{self.oracle_ODC}\\WR.WR_STPERMIT"
+
+        self.logger.info(f"PT Lands: SOURCE = {src_table_path}")
+        try:
+            fields = [f.name for f in arcpy.ListFields(src_table_path)]
+            self.logger.info(f"PT Lands: FIELDS = {src_table_path}")
+        except Exception as e:
+            self.logger.error(f"PT Lands: failed to ListFields on {src_table_path}: {e}")
+
         try:
             logger.info("Updating PT Points with modern approach")
 
@@ -248,9 +268,9 @@ class SDEDatabase:
             temp_legal = f"{self.test_SDE}\\OWRBGIS.WR_PT_Points_TMP_Legal"
 
             # Step 2: Use pandas-like operations for joins (via arcpy.da)
-            self._perform_lookup_joins(temp_legal, "WATER_CODE")
-            self._perform_lookup_joins(temp_legal, "PURPOSE_CODE")
-            self._perform_lookup_joins(temp_legal, "SIC_CODE")
+            self._perform_lookup_joins(temp_legal, 'WATER_CODE')
+            self._perform_lookup_joins(temp_legal, 'PURPOSE_CODE')
+            self._perform_lookup_joins(temp_legal, 'SIC_CODE')
 
             # Step 3: Create All and Active layers
             self._create_points_all_layer(temp_legal)
@@ -390,7 +410,7 @@ class SDEDatabase:
 
             # CSA SDE Production Operations
             (f"{self.test_SDE}\\OWRBGIS.WR_PT_Lands_Table", f"{self.csa_Prod_SDE}\\owrp.sde.WR_PT_Lands_Table"),
-            (f"{self.test_SDE}\\OWRBGIS.WR_PT_Lands_All", f"{self.csa_Prod_SDE}\\owrp.sde.WR_TP_Lands_All"),
+            (f"{self.test_SDE}\\OWRBGIS.WR_PT_Lands_All", f"{self.csa_Prod_SDE}\\owrp.sde.WR_PT_Lands_All"),
             (f"{self.test_SDE}\\OWRBGIS.WR_PT_Lands_Active", f"{self.csa_Prod_SDE}\\owrp.sde.WR_PT_Lands"),
             (f"{self.test_SDE}\\OWRBGIS.WR_PT_Points_All", f"{self.csa_Prod_SDE}\\owrp.sde.WR_PT_Points_All"),
             (f"{self.test_SDE}\\OWRBGIS.WR_PT_Points_Active", f"{self.csa_Prod_SDE}\\owrp.sde.WR_PT_Points"),
@@ -404,15 +424,30 @@ class SDEDatabase:
 
         ]
 
+        missing = [src for src, _ in sync_operations if not arcpy.Exists(src)]
+        if missing:
+            for m in missing:
+                logger.error(f"Source does not exist: {m}")
+            return False
+        
+        ok = True
+
         # Excecute sync operations in parallel batches
         batch_size = 3
 
         for i in range(0, len(sync_operations), batch_size):
             batch = sync_operations[i:i + batch_size]
+            logger.info(f"Running sync batch {i//batch_size + 1}: {len(batch)} opes")
 
             with ThreadPoolExecutor(max_workers=batch_size) as executor:
-                futures = [executor.submit(self._sync_single_layer, source, target)
-                           for source, target in batch]
+                futures = [executor.submit(self.truncate_and_copy, src, tgt) for src, tgt in batch]
+
+                for future in as_completed(futures):
+                    try:
+                        future.result() # raises if failed
+                    except Exception as e:
+                        ok = False
+                        logger.error(f"Batch {i//batch_size + 1} op failed: {e}")
                 
                 batch_results = [future.result() for future in as_completed(futures)]
 
@@ -468,11 +503,15 @@ class SDEDatabase:
         ]
 
         with ThreadPoolExecutor(max_workers=4) as executor:
-            futures = [executor.submit(self.export_table_safe, src, tgt, where)
-                       for src, tgt, where in export_operations]
-            results = [future.result() for future in as_completed(futures)]
-
-        return all(results)
+            futures = []
+            for op in export_operations:
+                if len(op) == 2:
+                    src, tgt = op; where = None
+                else:
+                    src, tgt, where = op
+                futures.append(executor.submit(self.export_table_safe, src, tgt, where))
+        results = [f.result() for f in futures]
+        return results
     
     def create_relationship_classes(self, temp_gdb_path: str) -> bool:
         """Create relationship classes in temp GDB."""
