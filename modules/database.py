@@ -12,7 +12,10 @@ History:
 Usage: Use in main script
 Comments: Added context managers, retry logic, and performance optimizations
 ************************************************************************************************************************************'''
-import arcpy, logging, time, pyodbc
+import arcpy
+import logging
+import time
+import pyodbc
 from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional, List, Dict, Any, Tuple
@@ -76,7 +79,7 @@ class SDEDatabase:
                 return {"source": src, "target": tgt, "rows": int(arcpy.management.GetCount(tgt)[0])}
             except Exception as e:
                 last_err = e
-                self.logger.warning(f"Attempt {attempt} failed: {e}. Retrying in {attempt}.0s...")
+                logger.warning(f"Attempt {attempt} failed: {e}. Retrying in {attempt}.0s...")
                 time.sleep(attempt) # 1s, 2s, 3s
         raise RuntimeError(f"Operation failed after {max_attempts} attempts: {last_err}")
     
@@ -250,92 +253,11 @@ class SDEDatabase:
         )
 
     def update_pt_lands_modern(self) -> bool:
-        """Modern implementation of 2bUpdatePTLandsOnTest."""
-
-        src_table_path = f"{self.oracle_ODC}\\WR.WR_STPERMIT"
-
-        self.logger.info(f"PT Lands: SOURCE = {src_table_path}")
-        try:
-            fields = [f.name for f in arcpy.ListFields(src_table_path)]
-            self.logger.info(f"PT Lands: FIELDS = {src_table_path}")
-        except Exception as e:
-            self.logger.error(f"PT Lands: failed to ListFields on {src_table_path}: {e}")
+        '''Modern implementation of 2bUpdatePTLandsOnTest.'''     
 
         try:
-            logger.info("Updating PT Points with modern approach")
+            logger.info("Updating PT Lands")
 
-            # Step 1: Create temp table and join operations
-            temp_legal = f"{self.test_SDE}\\OWRBGIS.WR_PT_Points_TMP_Legal"
-
-            # Step 2: Use pandas-like operations for joins (via arcpy.da)
-            self._perform_lookup_joins(temp_legal, 'WATER_CODE')
-            self._perform_lookup_joins(temp_legal, 'PURPOSE_CODE')
-            self._perform_lookup_joins(temp_legal, 'SIC_CODE')
-
-            # Step 3: Create All and Active layers
-            self._create_points_all_layer(temp_legal)
-            self._create_points_active_layer()
-
-            return True
-
-        except Exception as e:
-            logger.error(f"PT Points update failed: {e}")
-            return False
-
-    def _perform_lookup_joins(self, target_fc: str, lookup_field: str) -> None:
-        """Perform lookup value joins using modern arcpy.da cursors."""     
-
-        # Create lookup dirctionary for faster joins
-        lookup_dict = {}
-        
-        with arcpy.da.SearchCursor(f"{self.prod_SDE}\\OWRBGIS.WR_LOOKUP_VALUES",
-                                   ["CODE_VALUE", "DESCRIPTION"]) as cursor:
-            
-            for row in cursor:
-                lookup_dict[row[0]] = row[1]
-
-        # Update target features using the lookup
-        with arcpy.da.UpdateCursor(target_fc, [lookup_field]) as cursor:
-            for row in cursor:
-                if row[0] in lookup_dict:
-                    row[0] = lookup_dict[row[0]]
-                    cursor.updateRow(row)
-
-    def _create_points_all_layers(self, source_fc: str) -> None:
-        """Create and populate WR_PT_Points_All layer."""
-
-        all_layer = f"{self.test_SDE}\\OWRBGIS.WR_PT_Points_All"
-
-        # Export with filter
-        arcpy.conversion.ExportFeatures(
-            source_fc, all_layer,
-            where_clause="STATUS_CODE IS NULL OR STATUS_CODE IN ('A', 'E')"
-        )
-
-    def _create_points_active_layer(self) -> None:
-        """Create active points layer based on expiration date."""
-
-        # Dynamic date calculation
-        current_date = datetime.now().strftime("%Y-%m-%d")
-
-        arcpy.management.MakeFeatureLayer(
-            f"{self.test_SDE}\\OWRBGIS.WR_PT_Points_All",
-            "WR_PT_Points_All_Layer",
-            f"EXP_DATE >= date'{current_date}'"
-        )
-
-        arcpy.conversion.ExportFeatures(
-            "WR_PT_Points_All_Layer",
-            f"{self.test_SDE}\\OWRBGIS.WR_PT_Points_Active"
-        )
-
-    def update_pt_lands_modern(self) -> bool:
-        """Modern implementation of 2bUpdatePTLandsOnTest."""
-
-        try:
-            logger.info("Updating PT Lands with modern approach")
-
-            # Similar pattern to points but for lands
             lands_temp = f"{self.test_SDE}\\OWRBGIS.WR_PT_Lands_TMP_Legal"
 
             # Export base lands
@@ -344,10 +266,9 @@ class SDEDatabase:
                 lands_temp
             )
 
-            # Perform joins
-            self._perform_lookup_joins(lands_temp, "WATER_CODE")
-            self._perform_lookup_joins(lands_temp, "PURPOSE_CODE")
-            self._perform_lookup_joins(lands_temp, "SIC_CODE")
+            # Perform joins for descriptive fields
+            for fields in ("WATER_CODE", "PURPOSE_CODE", "SIC_CODE"):
+                self._perform_lookup_joins(lands_temp, field)
 
             # Create All and Active layers
             self._create_lands_layers(lands_temp)
@@ -357,7 +278,9 @@ class SDEDatabase:
         except Exception as e:
             logger.error(f"PT Lands update failed: {e}")
             return False
-        
+
+
+
     def _create_lands_layers(self, source_fc: str) -> None:
         """Create lands All and Active layers."""
 
@@ -372,7 +295,7 @@ class SDEDatabase:
         current_date = datetime.now().strftime("%Y-%m-%d")
         arcpy.management.MakeFeatureLayer(
             lands_all, "WR_PT_Lands_All_Layer", 
-            f"EXP_DATE >= date'{current_date}'"
+            f"EXP_DATE >= date '{current_date}'"
         )
 
         arcpy.conversion.ExportFeatures(
